@@ -4,4 +4,20 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "langfuse>=3.0.2",
+    "openai>=1.88.0",
+    "pip>=25.1.1",
+    "pydantic>=2.11.7",
+    "python-dotenv>=1.1.0",
+]
+
+[tool.ruff]
+line-length = 100
+extend-include = ["*.ipynb"]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.2.0",
+    "ruff>=0.12.0",
+]
