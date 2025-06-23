@@ -31,7 +31,7 @@ def query_batchAPI(response, revision, nb_echos_max=3):
 
     json_data = {"forms": [{"description_activity": activity} for activity in batch]}
 
-    params = {"nb_echos_max": nb_echos_max}
+    params = {"nb_echos_max": nb_echos_max, "prob_min": 0}
     url = f"{base_url}?{urlencode(params)}"
 
     response_api = requests.post(url, json=json_data)
