@@ -1,0 +1,6 @@
+nace_code: "8891A"
+model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
+expected_list_size: 10
+bias_type: "Général"
+revision: "NAF2008"
+temperature: 0.8
