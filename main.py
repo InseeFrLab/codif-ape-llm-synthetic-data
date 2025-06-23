@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from src.config import setup_langfuse
 from src.output_models import BiasType, create_llm_response_model
 from src.prompts import BIAS_INSTRUCTIONS
+from src.utils import get_df_naf
 
 # Load environment variables from .env file if it exists
 load_dotenv()
@@ -21,12 +22,12 @@ client = OpenAI(
 
 
 def ask_llm(
-    nace_code: str = "8891A",
-    code_description: str = "Accueil de jeunes enfants",
-    model_name: str = "mistralai/Mistral-Small-24B-Instruct-2501",
-    expected_list_size: int = 10,
-    bias_type: str = "Général",
-    temprature: float = 0.8,
+    nace_code: str,
+    model_name: str,
+    expected_list_size: int,
+    bias_type: str,
+    revision: str = "NAF2008",
+    temperature: float = 0.8,
 ):
     """
     Ask the LLM to generate synthetic data for a given NACE code with specified bias.
@@ -43,6 +44,15 @@ def ask_llm(
         LLMResponse: A structured response containing the generated activity descriptions and validation information.
     """
 
+    if revision not in ["NAF2008", "NAF2025"]:
+        raise ValueError("Revision must be either 'NAF2008' or 'NAF2025'.")
+
+    df_naf = get_df_naf(revision=revision)[["APE_NIV5", "LIB_NIV5"]]
+
+    if nace_code not in df_naf["APE_NIV5"].values:
+        raise ValueError(f"NACE code {nace_code} not found in the dataset.")
+    code_description = df_naf.loc[df_naf["APE_NIV5"] == nace_code, "LIB_NIV5"].values[0]
+
     bias_type = BiasType(bias_type).value  # validation
     LLMResponse = create_llm_response_model(expected_list_size)
 
@@ -58,7 +68,7 @@ def ask_llm(
                 bias=bias_type,
                 bias_instructions=BIAS_INSTRUCTIONS[bias_type],
             ),
-            temperature=temprature,
+            temperature=temperature,
             max_tokens=500,
             response_format=LLMResponse,
         )
