@@ -1,8 +1,10 @@
 import os
 
+import hydra
 from dotenv import load_dotenv
 from langfuse import Langfuse
 from langfuse.openai import OpenAI
+from omegaconf import DictConfig
 
 from src.config import setup_langfuse
 from src.output_models import BiasType, create_llm_response_model
@@ -67,12 +69,27 @@ def ask_llm(
     return response
 
 
-if __name__ == "__main__":
-    nace_code = "8891A"
-    code_description = "Accueil de jeunes enfants"
-    model_name = "mistralai/Mistral-Small-24B-Instruct-2501"
-    bias_type = "Général"
-    expected_list_size = 10
+@hydra.main(version_base=None, config_path="config", config_name="config")
+def main(cfg: DictConfig) -> None:
+    """Main function that uses Hydra configuration."""
 
-    response = ask_llm(nace_code, code_description, model_name, expected_list_size, bias_type)
+    nace_code = cfg.nace_code
+    model_name = cfg.model_name
+    expected_list_size = cfg.expected_list_size
+    bias_type = cfg.bias_type
+    revision = cfg.get("revision", "NAF2008")
+    temperature = cfg.get("temperature", 0.8)
+
+    response = ask_llm(
+        nace_code=nace_code,
+        model_name=model_name,
+        expected_list_size=expected_list_size,
+        bias_type=bias_type,
+        revision=revision,
+        temperature=temperature,
+    )
     print(response)
+
+
+if __name__ == "__main__":
+    main()
