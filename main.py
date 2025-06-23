@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from src.config import setup_langfuse
 from src.output_models import BiasType, create_llm_response_model
 from src.prompts import BIAS_INSTRUCTIONS
+from src.request_API import accuracy_score, purity_score, query_batchAPI
 from src.utils import get_df_naf
 
 # Load environment variables from .env file if it exists
@@ -87,8 +88,9 @@ def main(cfg: DictConfig) -> None:
     model_name = cfg.model_name
     expected_list_size = cfg.expected_list_size
     bias_type = cfg.bias_type
-    revision = cfg.get("revision", "NAF2008")
-    temperature = cfg.get("temperature", 0.8)
+    revision = cfg.get("revision")
+    temperature = cfg.get("temperature")
+    nb_echos_max = cfg.get("nb_echos_max")
 
     response = ask_llm(
         nace_code=nace_code,
@@ -98,7 +100,16 @@ def main(cfg: DictConfig) -> None:
         revision=revision,
         temperature=temperature,
     )
-    print(response)
+    predictions = query_batchAPI(response, revision=revision, nb_echos_max=nb_echos_max)
+
+    print(predictions)
+
+    accuracies = accuracy_score(predictions, nace_code)
+    print(f"Accuracies: {accuracies}")
+
+    if bias_type == "Genre & Nombre" or bias_type == "Typo & Registre":
+        purity = purity_score(predictions)
+        print(f"Purity: {purity}")
 
 
 if __name__ == "__main__":

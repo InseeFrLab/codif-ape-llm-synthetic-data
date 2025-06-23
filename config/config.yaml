@@ -4,3 +4,4 @@ expected_list_size: 10
 bias_type: "Général"
 revision: "NAF2008"
 temperature: 0.8
+nb_echos_max: 3
