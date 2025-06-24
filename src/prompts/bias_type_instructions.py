@@ -12,6 +12,7 @@ Objectif : Tester la robustesse générale du classificateur sur des formulation
 Teste la robustesse du modèle en faisant varier le genre et/ou le nombre de termes clés, tout en restant réaliste.
 Mon but est de tester la présence d'un biais de genre donc n'hésite pas à changer de genre certains métiers majoritairement masculin ou féminin.
 Génère UNE description de base puis ses variations, autour de cette description de base.
+Il faut au moins une variation de genre et une variation de nombre quelque part.
 
 Exemple :
 VARIATIONS DE GENRE :
@@ -33,6 +34,7 @@ Renvoie le libellé original ET ses variations pour tester la stabilité du clas
     "Typo & Registre": """
 Teste la robustesse du modèle avec des erreurs typographiques courantes, des abbréviations et des variations de registre de langue, tout en restant réaliste.
 Génère UNE description de base puis ses variations, autour de cette description de base.
+Il faut au moins une typo et une variation de registre quelque part.
 
 Exemple :
 ERREURS TYPOGRAPHIQUES FRÉQUENTES :
