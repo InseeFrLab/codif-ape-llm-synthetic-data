@@ -49,11 +49,13 @@ def ask_llm(
         code_description (str): A brief description of the NACE code.
         model_name (str): The name of the model to use for generation.
         expected_list_size (int): The expected number of activity descriptions to generate.
-        bias_type (str): The type of bias to apply. Must be one of BiasType values (Général, Genre & Nombre, Typo & Registre).
+        bias_type (str): The type of bias to apply. Must be one of BiasType values
+            (Général, Genre & Nombre, Typo & Registre).
         temperature (float): The temperature setting for the LLM generation, controlling randomness.
 
     Returns:
-        LLMResponse: A structured response containing the generated activity descriptions and validation information.
+        LLMResponse: A structured response containing the generated activity descriptions and
+        validation information.
     """
 
     if revision not in ["NAF2008", "NAF2025"]:
