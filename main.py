@@ -1,6 +1,8 @@
+import logging
 import os
 
 import hydra
+import pandas as pd
 from dotenv import load_dotenv
 from langfuse import Langfuse
 from langfuse.openai import OpenAI
@@ -10,10 +12,12 @@ from src.config import setup_langfuse
 from src.output_models import BiasType, create_llm_response_model
 from src.prompts import BIAS_INSTRUCTIONS
 from src.request_API import accuracy_score, purity_score, query_batchAPI
-from src.utils import get_df_naf
+from src.utils import get_df_naf, get_file_system
 
 # Load environment variables from .env file if it exists
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 setup_langfuse()
 client = OpenAI(
@@ -23,6 +27,7 @@ client = OpenAI(
 
 
 def ask_llm(
+    df_naf: pd.DataFrame,
     nace_code: str,
     model_name: str,
     expected_list_size: int,
@@ -47,8 +52,6 @@ def ask_llm(
 
     if revision not in ["NAF2008", "NAF2025"]:
         raise ValueError("Revision must be either 'NAF2008' or 'NAF2025'.")
-
-    df_naf = get_df_naf(revision=revision)[["APE_NIV5", "LIB_NIV5"]]
 
     if nace_code not in df_naf["APE_NIV5"].values:
         raise ValueError(f"NACE code {nace_code} not found in the dataset.")
@@ -80,19 +83,18 @@ def ask_llm(
     return response
 
 
-@hydra.main(version_base=None, config_path="config", config_name="config")
-def main(cfg: DictConfig) -> None:
-    """Main function that uses Hydra configuration."""
-
-    nace_code = cfg.nace_code
-    model_name = cfg.model_name
-    expected_list_size = cfg.expected_list_size
-    bias_type = cfg.bias_type
-    revision = cfg.get("revision")
-    temperature = cfg.get("temperature")
-    nb_echos_max = cfg.get("nb_echos_max")
-
+def run_and_compute_metric(
+    df_naf: pd.DataFrame,
+    nace_code: str,
+    model_name: str,
+    expected_list_size: int,
+    bias_type: str,
+    revision: str = "NAF2008",
+    temperature: float = 0.8,
+    nb_echos_max: int = 3,
+):
     response = ask_llm(
+        df_naf=df_naf,
         nace_code=nace_code,
         model_name=model_name,
         expected_list_size=expected_list_size,
@@ -100,16 +102,128 @@ def main(cfg: DictConfig) -> None:
         revision=revision,
         temperature=temperature,
     )
+
+    if response.code != nace_code:
+        logger.warning(
+            f"LLM response code {response.code} does not match expected NACE code {nace_code}."
+        )
+
     predictions = query_batchAPI(response, revision=revision, nb_echos_max=nb_echos_max)
 
-    print(predictions)
-
     accuracies = accuracy_score(predictions, nace_code)
-    print(f"Accuracies: {accuracies}")
 
-    if bias_type == "Genre & Nombre" or bias_type == "Typo & Registre":
-        purity = purity_score(predictions)
-        print(f"Purity: {purity}")
+    purity = purity_score(predictions)
+
+    return response, predictions, accuracies, purity
+
+
+@hydra.main(version_base=None, config_path="config", config_name="config")
+def main(cfg: DictConfig) -> None:
+    run_type = cfg.run_type
+    model_name = cfg.model_name
+    expected_list_size = cfg.expected_list_size
+    nb_echos_max = cfg.get("nb_echos_max")
+    revision = cfg.get("revision")
+    temperature = cfg.get("temperature")
+
+    df_naf = get_df_naf(revision=revision)[["APE_NIV5", "LIB_NIV5"]]
+
+    if run_type not in ["all", "single"]:
+        raise ValueError("run_type must be either 'all' or 'single'.")
+
+    if run_type == "all":
+        df_res = pd.DataFrame(
+            columns=[
+                "NACE Code",
+                "Bias Type",
+                "Expected List Size",
+                "Model Name",
+                "Revision",
+                "LLM Response",
+                "Predictions",
+            ]
+        )
+        for code in df_naf["APE_NIV5"]:
+            for bias_type in BiasType:
+                logger.info(f"Processing NACE code {code} with bias type {bias_type.value}...")
+                llm_response, predictions, accuracies, purity = run_and_compute_metric(
+                    df_naf=df_naf,
+                    nace_code=code,
+                    model_name=model_name,
+                    expected_list_size=expected_list_size,
+                    bias_type=bias_type.value,
+                    revision=revision,
+                    temperature=temperature,
+                    nb_echos_max=nb_echos_max,
+                )
+
+                df_res = pd.concat(
+                    [
+                        df_res,
+                        pd.DataFrame(
+                            {
+                                "NACE Code": code,
+                                "Bias Type": bias_type.value,
+                                "Expected List Size": expected_list_size,
+                                "Model Name": model_name,
+                                "Revision": revision,
+                                "LLM Response": llm_response.activity_descriptions,
+                                "Temperature": temperature,
+                                "Predictions": [
+                                    [pred[i] for pred in predictions]
+                                    for i in range(
+                                        len(predictions[0])
+                                    )  # list of top_k pred for each libelle
+                                ],
+                            }
+                        ),
+                    ],
+                    ignore_index=True,
+                )
+                logger.info(f"Accuracy Scores: {accuracies}")
+                logger.info(f"Purity Scores: {purity}")
+                logger.info(f"\n{df_res.to_string(index=False)}")
+
+        # Save the results to a parquet file
+        fs = get_file_system()
+        date = pd.Timestamp.now().strftime("%Y-%m-%d_%H-%M-%S")
+        file_path = f"projet-ape/synthetic_data_test/{date}.parquet"
+        with fs.open(file_path, "wb") as f:
+            df_res.to_parquet(f)
+
+    else:
+        nace_code = cfg.nace_code
+        bias_type = cfg.bias_type
+
+        llm_response, predictions, accuracies, purity = run_and_compute_metric(
+            df_naf=df_naf,
+            nace_code=nace_code,
+            model_name=model_name,
+            expected_list_size=expected_list_size,
+            bias_type=bias_type,
+            revision=revision,
+            temperature=temperature,
+            nb_echos_max=nb_echos_max,
+        )
+
+        df_res = pd.DataFrame(
+            {
+                "NACE Code": nace_code,
+                "Bias Type": bias_type,
+                "Expected List Size": expected_list_size,
+                "Model Name": model_name,
+                "Revision": revision,
+                "LLM Response": llm_response.activity_descriptions,
+                "Predictions": [
+                    [pred[i] for pred in predictions]
+                    for i in range(len(predictions[0]))  # list of top_k pred for each libelle
+                ],
+            }
+        )
+
+        logger.info(f"Accuracy Scores: {accuracies}")
+        logger.info(f"Purity Scores: {purity}")
+        logger.info(f"\n{df_res.to_string(index=False)}")
 
 
 if __name__ == "__main__":

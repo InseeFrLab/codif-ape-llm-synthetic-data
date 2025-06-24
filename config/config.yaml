@@ -1,3 +1,4 @@
+run_type: "single"
 nace_code: "8891A"
 model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
 expected_list_size: 10
