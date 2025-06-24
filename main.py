@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from langfuse import Langfuse
 from langfuse.openai import OpenAI
 from omegaconf import DictConfig
+from openai import LengthFinishReasonError
 from pydantic import ValidationError
 
 from src.config import setup_langfuse
@@ -89,8 +90,8 @@ def ask_llm(
 
             return response
 
-        except ValidationError as e:
-            print(f"[Attempt {attempt}] Validation failed: {e}")
+        except (ValidationError, LengthFinishReasonError) as e:
+            logger.error(f"[Attempt {attempt}] Validation failed: {e}")
             if attempt < MAX_RETRIES:
                 time.sleep(RETRY_DELAY)
             else:
