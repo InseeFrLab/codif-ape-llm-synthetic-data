@@ -199,7 +199,7 @@ def main(cfg: DictConfig) -> None:
                 )
                 logger.info(f"Accuracy Scores: {accuracies}")
                 logger.info(f"Purity Scores: {purity}")
-                logger.info(f"\n{df_res.head().to_string(index=False)}")
+                logger.info(f"\n{df_res.tail().to_string(index=False)}")
 
         # Save the results to a parquet file
         fs = get_file_system()
