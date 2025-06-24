@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 import hydra
 import pandas as pd
@@ -7,6 +8,7 @@ from dotenv import load_dotenv
 from langfuse import Langfuse
 from langfuse.openai import OpenAI
 from omegaconf import DictConfig
+from pydantic import ValidationError
 
 from src.config import setup_langfuse
 from src.output_models import BiasType, create_llm_response_model
@@ -24,6 +26,9 @@ client = OpenAI(
     base_url="https://vllm-generation.user.lab.sspcloud.fr/v1",
     api_key=os.environ.get("OPENAI_API_KEY"),
 )
+
+MAX_RETRIES = 10
+RETRY_DELAY = 1  # seconds
 
 
 def ask_llm(
@@ -62,25 +67,34 @@ def ask_llm(
 
     prompt = Langfuse().get_prompt(name="llm-synthetic-data", label="production")
 
-    response = (
-        client.beta.chat.completions.parse(
-            model=model_name,
-            messages=prompt.compile(
-                nace_code=nace_code,
-                code_description=code_description,
-                expected_count=expected_list_size,
-                bias=bias_type,
-                bias_instructions=BIAS_INSTRUCTIONS[bias_type],
-            ),
-            temperature=temperature,
-            max_tokens=500,
-            response_format=LLMResponse,
-        )
-        .choices[0]
-        .message.parsed
-    )
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = (
+                client.beta.chat.completions.parse(
+                    model=model_name,
+                    messages=prompt.compile(
+                        nace_code=nace_code,
+                        code_description=code_description,
+                        expected_count=expected_list_size,
+                        bias=bias_type,
+                        bias_instructions=BIAS_INSTRUCTIONS[bias_type],
+                    ),
+                    temperature=temperature,
+                    max_tokens=500,
+                    response_format=LLMResponse,
+                )
+                .choices[0]
+                .message.parsed
+            )
 
-    return response
+            return response
+
+        except ValidationError as e:
+            print(f"[Attempt {attempt}] Validation failed: {e}")
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY)
+            else:
+                raise ValueError(f"All {MAX_RETRIES} attempts failed to produce a valid output.")
 
 
 def run_and_compute_metric(
@@ -182,7 +196,7 @@ def main(cfg: DictConfig) -> None:
                 )
                 logger.info(f"Accuracy Scores: {accuracies}")
                 logger.info(f"Purity Scores: {purity}")
-                logger.info(f"\n{df_res.to_string(index=False)}")
+                logger.info(f"\n{df_res.head().to_string(index=False)}")
 
         # Save the results to a parquet file
         fs = get_file_system()
